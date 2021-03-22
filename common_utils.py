@@ -26,6 +26,7 @@ class commonUtils:
         """
         try:
             spark = SparkSession.builder.appName("carCrashAnalysis").getOrCreate()
+            spark.conf.set("spark.sql.shuffle.partitions", 10)
             return spark
         except Exception as e:
             print("Error occurred while creating Spark Session!")
