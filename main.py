@@ -3,8 +3,6 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import *
 from pyspark import StorageLevel
-from datetime import datetime
-from datetime import timedelta
 import argparse
 import common_utils as commonUtils
 
@@ -52,6 +50,11 @@ def analysis_3(units_use_df, primary_person_df):
 
 
 def analysis_4(units_use_df):
+    """
+    returns Top 5th to 15th VEH_MAKE_IDs that contribute to a largest number of injuries including death
+    :param units_use_df:
+    :return:
+    """
     injury_death_df = units_use_df.filter(col('VEH_MAKE_ID') != 'NA').select('VEH_MAKE_ID', 'TOT_INJRY_CNT',
                                                                              'DEATH_CNT') \
         .withColumn('death_injury_count', (col('TOT_INJRY_CNT') + col('DEATH_CNT')).cast(IntegerType()))
@@ -65,6 +68,12 @@ def analysis_4(units_use_df):
 
 
 def analysis_5(primary_person_df, units_use_df):
+    """
+    For all the body styles involved in crashes, return the top ethnic user group of each unique body style
+    :param primary_person_df:
+    :param units_use_df:
+    :return:
+    """
     vehicle_body_df = units_use_df.select("CRASH_ID", "UNIT_NBR", "VEH_BODY_STYL_ID")
     ethnic_df = primary_person_df.select("CRASH_ID", "UNIT_NBR", "PRSN_ETHNICITY_ID")
     body_ethnic_df = vehicle_body_df.join(ethnic_df, [ethnic_df["CRASH_ID"] == vehicle_body_df["CRASH_ID"],
@@ -81,6 +90,13 @@ def analysis_5(primary_person_df, units_use_df):
 
 
 def analysis_6(primary_person_df, units_use_df):
+    """
+    Among the crashed cars, returns the Top 5 Zip Codes with highest number crashes with alcohols as the contributing
+    factor to a crash (Use Driver Zip Code)
+    :param primary_person_df:
+    :param units_use_df:
+    :return:
+    """
     alcolhol_crash_df = primary_person_df.filter(
         (col('PRSN_ALC_RSLT_ID') == 'Positive') & (col('DRVR_ZIP').isNotNull())).select('CRASH_ID', 'UNIT_NBR',
                                                                                         'DRVR_ZIP')
@@ -96,6 +112,13 @@ def analysis_6(primary_person_df, units_use_df):
 
 
 def analysis_7(damages_use_df, units_use_df):
+    """
+    Count of Distinct Crash IDs where No Damaged Property was observed and Damage Level (VEH_DMAG_SCL~) is above 4
+    and car avails Insurance
+    :param damages_use_df:
+    :param units_use_df:
+    :return:
+    """
     damage_cars_df = units_use_df.filter(
         (col('VEH_BODY_STYL_ID').contains('CAR')) & ((col('FIN_RESP_TYPE_ID')) != 'NA'))
     damage_cars_df = damage_cars_df.filter((regexp_extract(col('VEH_DMAG_SCL_1_ID'), "[5-9]+", 0) != '') | (
@@ -107,9 +130,10 @@ def analysis_7(damages_use_df, units_use_df):
 
 
 def top_offence_states_lkp(units_use_df):
-    # Top 25 states
-    # re use below Df from q 3, add filter for NA
-    # dropDuplicates because of data anomaly
+    """
+    :param units_use_df:
+    :return: top 25 states with highest number of offences
+    """
     top_offence_states_df = units_use_df.filter(col('VEH_LIC_STATE_ID') != 'NA').select('CRASH_ID', 'UNIT_NBR',
                                                                                         "VEH_LIC_STATE_ID").dropDuplicates()
     top_offence_states_df = top_offence_states_df.groupBy('VEH_LIC_STATE_ID').count()
@@ -121,7 +145,10 @@ def top_offence_states_lkp(units_use_df):
 
 
 def top_vehicle_colors_lkp(units_use_df):
-    # Top 10 used vehicle colors
+    """
+    :param units_use_df:
+    :return: returns Top 10 used vehicle colors
+    """
     top_vehicle_colors_df = units_use_df.filter(col('VEH_COLOR_ID') != 'NA').select('CRASH_ID', 'UNIT_NBR',
                                                                                     "VEH_COLOR_ID").dropDuplicates()
     top_vehicle_colors_df = top_vehicle_colors_df.groupBy('VEH_COLOR_ID').count()
@@ -131,6 +158,15 @@ def top_vehicle_colors_lkp(units_use_df):
 
 
 def analysis_8(units_use_df, restrict_use_df, charges_use_df):
+    """
+    : Determine the Top 5 Vehicle Makes where drivers are charged with speeding related offences,
+    has licensed Drivers, uses top 10 used vehicle colours and has car licensed with the Top 25 states with highest
+    number of offences
+    :param units_use_df:
+    :param restrict_use_df:
+    :param charges_use_df:
+    :return:
+    """
     top_offence_states_df = top_offence_states_lkp(units_use_df)
     top_vehicle_colors_df = top_vehicle_colors_lkp(units_use_df)
 
@@ -166,6 +202,13 @@ def analysis_8(units_use_df, restrict_use_df, charges_use_df):
 
 
 def process(spark, utils, args):
+    """
+    This function calls different analytical functions to meet the requirements
+    :param spark: spark session object
+    :param utils: utils object to use common utils
+    :param args: command line arguments
+    :return: None
+    """
     ip_dir = args.input_dir
     op_dir = args.output_dir
 
@@ -177,11 +220,15 @@ def process(spark, utils, args):
     charges_use_ip_path = ip_dir + "/Charges_use.csv"
 
     primary_person_df = utils.read_csv(spark, primary_person_ip_path)
+    primary_person_df.repartition(10)
+    primary_person_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     analysis_1_result = analysis_1(primary_person_df)
     utils.write_text_data(analysis_1_result, op_dir + "/analysis_1_op.txt")
 
     units_use_df = utils.read_csv(spark, units_use_ip_path).dropDuplicates()
+    units_use_df.repartition(10)
+    units_use_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     analysis_2_result = analysis_2(units_use_df)
     utils.write_text_data(analysis_2_result, op_dir + "/analysis_2_op.txt")
@@ -211,11 +258,22 @@ def process(spark, utils, args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Car Crash Analysis')
-    parser.add_argument('-id', "--input_dir", help="directory for input files", required=False, default="./Data")
-    parser.add_argument('-od', "--output_dir", help="directory for output files", required=False,
-                        default="./OutputData")
-    args = parser.parse_args()
-    utils = commonUtils.commonUtils()
-    spark = utils.create_session()
-    process(spark, utils, args)
+    """
+    Main method, execution starts from here.
+    Parses command line arguments
+    creates spark session object and common utils object
+    calls process() method to execute the requirements
+    """
+    try:
+        parser = argparse.ArgumentParser(description='Car Crash Analysis')
+        parser.add_argument('-id', "--input_dir", help="directory for input files", required=False, default="./Data")
+        parser.add_argument('-od', "--output_dir", help="directory for output files", required=False,
+                            default="./OutputData")
+        args = parser.parse_args()
+        utils = commonUtils.commonUtils()
+        spark = utils.create_session()
+        process(spark, utils, args)
+    except Exception as e:
+        print("Error occurred!")
+        print(e)
+        exit(0)
