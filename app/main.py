@@ -44,7 +44,6 @@ def analysis_3(units_use_df, primary_person_df):
         .select(primary_person_df['CRASH_ID']).dropDuplicates()
 
     crash_state_wise_female_df = crash_state_wise_df.join(female_crash_df, how='inner', on='CRASH_ID')
-    crash_state_wise_female_df.repartition(18)
     crash_state_wise_female_df = crash_state_wise_female_df.groupBy('VEH_LIC_STATE_ID').agg({'CRASH_ID': 'count'}) \
         .withColumnRenamed('count(CRASH_ID)', 'crash_count_by_state').sort('crash_count_by_state', ascending=False)
     result = crash_state_wise_female_df.head()
@@ -222,14 +221,14 @@ def process(spark, utils, args):
     charges_use_ip_path = ip_dir + "/Charges_use.csv"
 
     primary_person_df = utils.read_csv(spark, primary_person_ip_path)
-    primary_person_df.repartition(10)
+    primary_person_df.repartition(utils.get_num_partitions(primary_person_ip_path))
     primary_person_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     analysis_1_result = analysis_1(primary_person_df)
     utils.write_text_data(analysis_1_result, op_dir + "/analysis_1_op.txt")
 
     units_use_df = utils.read_csv(spark, units_use_ip_path).dropDuplicates()
-    units_use_df.repartition(10)
+    units_use_df = units_use_df.repartition(utils.get_num_partitions(units_use_ip_path))
     units_use_df.persist(StorageLevel.MEMORY_AND_DISK)
 
     analysis_2_result = analysis_2(units_use_df)

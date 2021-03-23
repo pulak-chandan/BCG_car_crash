@@ -1,4 +1,7 @@
 from pyspark.sql import SparkSession
+import os.path
+from os import path
+
 
 class commonUtils:
     def __init__(self):
@@ -26,7 +29,7 @@ class commonUtils:
         """
         try:
             spark = SparkSession.builder.appName("carCrashAnalysis").getOrCreate()
-            spark.conf.set("spark.sql.shuffle.partitions", 10)
+            spark.conf.set("spark.sql.shuffle.partitions", 6)
             return spark
         except Exception as e:
             print("Error occurred while creating Spark Session!")
@@ -57,3 +60,12 @@ class commonUtils:
             print("Error occurred while writing text data!")
             print(e)
             exit(0)
+
+    def get_num_partitions(self, filepath):
+        """
+        Dynamically calculate num partitions based on the file size
+        :param filepath:
+        :return:
+        """
+        numPartitions = round((os.path.getsize(filepath) / (1024 * 1024)) / 128)
+        return max(numPartitions, 6)
